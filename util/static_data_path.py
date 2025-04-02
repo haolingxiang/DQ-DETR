@@ -8,3 +8,14 @@ coco = dict(
         ann_file = '/comp_robot/cv_public_dataset/COCO2017/annotations/instances_val2017.json'
     )
 )
+
+dota = dict(
+    train=dict(
+        img_folder = '',
+        ann_file = ''
+    ),
+    val=dict(
+        img_folder = '',
+        ann_file = ''
+    )
+)

@@ -21,6 +21,53 @@ from scipy.optimize import linear_sum_assignment
 
 from util.box_ops import box_cxcywh_to_xyxy, generalized_box_iou
 
+from shapely.geometry import Polygon
+
+# 修改后的L1损失计算（包含角度参数化）
+def compute_l1_cost(out_rbox, tgt_rbox):
+    # 提取参数：中心点、宽高、角度（弧度）
+    out_xy, out_wh, out_angle = out_rbox[..., :2], out_rbox[..., 2:4], out_rbox[..., 4]
+    tgt_xy, tgt_wh, tgt_angle = tgt_rbox[..., :2], tgt_rbox[..., 2:4], tgt_rbox[..., 4]
+
+    # 中心点与宽高的L1损失
+    cost_xy = torch.cdist(out_xy, tgt_xy, p=1)
+    cost_wh = torch.cdist(out_wh, tgt_wh, p=1)
+
+    # 角度转换为sin/cos的L1损失
+    out_sin = torch.sin(out_angle)
+    out_cos = torch.cos(out_angle)
+    tgt_sin = torch.sin(tgt_angle)
+    tgt_cos = torch.cos(tgt_angle)
+    cost_angle = (torch.abs(out_sin - tgt_sin) + torch.abs(out_cos - tgt_cos)) * 0.5
+
+    # 加权总和（权重可根据任务调整）
+    return cost_xy + cost_wh + cost_angle
+
+def compute_rotated_giou(out_poly, tgt_poly):
+    """
+    输入：两组旋转框的多边形顶点（形状为[N,8]和[M,8]）
+    输出：GIOU损失矩阵[N,M]
+    """
+    giou_matrix = []
+    for out_p in out_poly:
+        row = []
+        for tgt_p in tgt_poly:
+            # 转换为Shapely多边形
+            poly1 = Polygon(out_p.reshape(4, 2))
+            poly2 = Polygon(tgt_p.reshape(4, 2))
+
+            # 计算交集和最小闭合区域
+            inter = poly1.intersection(poly2).area
+            union = poly1.area + poly2.area - inter
+            C = poly1.envelope.union(poly2.envelope).area  # 最小外接矩形
+
+            # GIOU公式
+            iou = inter / (union + 1e-6)
+            giou = iou - (C - union) / (C + 1e-6)
+            row.append(1 - giou)  # 损失=1-GIOU
+        giou_matrix.append(row)
+
+    return torch.tensor(giou_matrix)
 
 class HungarianMatcher(nn.Module):
     """This class computes an assignment between the targets and the predictions of the network
@@ -80,14 +127,25 @@ class HungarianMatcher(nn.Module):
         pos_cost_class = alpha * ((1 - out_prob) ** gamma) * (-(out_prob + 1e-8).log())
         cost_class = pos_cost_class[:, tgt_ids] - neg_cost_class[:, tgt_ids]
 
-        # Compute the L1 cost between boxes
-        cost_bbox = torch.cdist(out_bbox, tgt_bbox, p=1)
-            
-        # Compute the giou cost betwen boxes            
-        cost_giou = -generalized_box_iou(box_cxcywh_to_xyxy(out_bbox), box_cxcywh_to_xyxy(tgt_bbox))
+        # # Compute the L1 cost between boxes
+        # cost_bbox = torch.cdist(out_bbox, tgt_bbox, p=1)
+        """
+            修改后的旋转框L1损失，增加了角度
+        """
+        # Compute the L1 cost between rbboxes
+        cost_rbbox = compute_l1_cost(out_bbox, tgt_bbox)
+
+        # # Compute the giou cost betwen boxes
+        # cost_giou = -generalized_box_iou(box_cxcywh_to_xyxy(out_bbox), box_cxcywh_to_xyxy(tgt_bbox))
+        """
+            修改后的旋转框giou损失
+        """
+        # Compute the giou cost betwen rboxes
+        cost_giou = compute_rotated_giou(box_cxcywh_to_xyxy(out_bbox), box_cxcywh_to_xyxy(tgt_bbox))
+
 
         # Final cost matrix
-        C = self.cost_bbox * cost_bbox + self.cost_class * cost_class + self.cost_giou * cost_giou
+        C = self.cost_rbbox * cost_rbbox + self.cost_class * cost_class + self.cost_giou * cost_giou
         C = C.view(bs, num_queries, -1).cpu()
 
         sizes = [len(v["boxes"]) for v in targets]

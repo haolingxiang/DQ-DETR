@@ -32,31 +32,33 @@ from .deformable_transformer import build_deformable_transformer
 from .utils import sigmoid_focal_loss, MLP
 
 from ..registry import MODULE_BUILD_FUNCS
-from .dn_components import prepare_for_cdn,dn_post_process
+from .dn_components import prepare_for_cdn, dn_post_process
+
 
 class DQDETR(nn.Module):
     """ This is the Cross-Attention Detector module that performs object detection """
-    def __init__(self, backbone, transformer, num_classes, num_queries, 
-                    aux_loss=False, iter_update=False,
-                    query_dim=2, 
-                    random_refpoints_xy=False,
-                    fix_refpoints_hw=-1,
-                    num_feature_levels=1,
-                    nheads=8,
-                    # two stage
-                    two_stage_type='no', # ['no', 'standard']
-                    two_stage_add_query_num=0,
-                    dec_pred_class_embed_share=True,
-                    dec_pred_bbox_embed_share=True,
-                    two_stage_class_embed_share=True,
-                    two_stage_bbox_embed_share=True,
-                    decoder_sa_type = 'sa',
-                    num_patterns = 0,
-                    dn_number = 100,
-                    dn_box_noise_scale = 0.4,
-                    dn_label_noise_ratio = 0.5,
-                    dn_labelbook_size = 100,
-                    ):
+
+    def __init__(self, backbone, transformer, num_classes, num_queries,
+                 aux_loss=False, iter_update=False,
+                 query_dim=2,
+                 random_refpoints_xy=False,
+                 fix_refpoints_hw=-1,
+                 num_feature_levels=1,
+                 nheads=8,
+                 # two stage
+                 two_stage_type='no',  # ['no', 'standard']
+                 two_stage_add_query_num=0,
+                 dec_pred_class_embed_share=True,
+                 dec_pred_bbox_embed_share=True,
+                 two_stage_class_embed_share=True,
+                 two_stage_bbox_embed_share=True,
+                 decoder_sa_type='sa',
+                 num_patterns=0,
+                 dn_number=100,
+                 dn_box_noise_scale=0.4,
+                 dn_label_noise_ratio=0.5,
+                 dn_labelbook_size=100,
+                 ):
         """ Initializes the model.
         Parameters:
             backbone: torch module of the backbone to be used. See backbone.py
@@ -123,13 +125,13 @@ class DQDETR(nn.Module):
 
         self.iter_update = iter_update
         assert iter_update, "Why not iter_update?"
-                
+
         # prepare pred layers
         self.dec_pred_class_embed_share = dec_pred_class_embed_share
         self.dec_pred_bbox_embed_share = dec_pred_bbox_embed_share
         # prepare class & box embed
         _class_embed = nn.Linear(hidden_dim, num_classes)
-        _bbox_embed = MLP(hidden_dim, hidden_dim, 4, 3)
+        _bbox_embed = MLP(hidden_dim, hidden_dim, 5, 3)
         # init the two embed layers
         prior_prob = 0.01
         bias_value = -math.log((1 - prior_prob) / prior_prob)
@@ -160,13 +162,13 @@ class DQDETR(nn.Module):
                 self.transformer.enc_out_bbox_embed = _bbox_embed
             else:
                 self.transformer.enc_out_bbox_embed = copy.deepcopy(_bbox_embed)
-    
+
             if two_stage_class_embed_share:
                 assert dec_pred_class_embed_share and dec_pred_bbox_embed_share
                 self.transformer.enc_out_class_embed = _class_embed
             else:
                 self.transformer.enc_out_class_embed = copy.deepcopy(_class_embed)
-    
+
             self.refpoint_embed = None
             if self.two_stage_add_query_num > 0:
                 self.init_ref_points(two_stage_add_query_num)
@@ -193,8 +195,7 @@ class DQDETR(nn.Module):
     def init_ref_points(self, use_num_queries):
         self.refpoint_embed = nn.Embedding(use_num_queries, self.query_dim)
         if self.random_refpoints_xy:
-
-            self.refpoint_embed.weight.data[:, :2].uniform_(0,1)
+            self.refpoint_embed.weight.data[:, :2].uniform_(0, 1)
             self.refpoint_embed.weight.data[:, :2] = inverse_sigmoid(self.refpoint_embed.weight.data[:, :2])
             self.refpoint_embed.weight.data[:, :2].requires_grad = False
 
@@ -210,14 +211,14 @@ class DQDETR(nn.Module):
             print('learn a shared h and w')
             assert self.random_refpoints_xy
             self.refpoint_embed = nn.Embedding(use_num_queries, 2)
-            self.refpoint_embed.weight.data[:, :2].uniform_(0,1)
+            self.refpoint_embed.weight.data[:, :2].uniform_(0, 1)
             self.refpoint_embed.weight.data[:, :2] = inverse_sigmoid(self.refpoint_embed.weight.data[:, :2])
             self.refpoint_embed.weight.data[:, :2].requires_grad = False
             self.hw_embed = nn.Embedding(1, 1)
         else:
             raise NotImplementedError('Unknown fix_refpoints_hw {}'.format(self.fix_refpoints_hw))
 
-    def forward(self, samples: NestedTensor, targets:List=None):
+    def forward(self, samples: NestedTensor, targets: List = None):
         """ The forward expects a NestedTensor, which consists of:
                - samples.tensor: batched images, of shape [batch_size x 3 x H x W]
                - samples.mask: a binary mask of shape [batch_size x H x W], containing 1 on padded pixels
@@ -235,7 +236,6 @@ class DQDETR(nn.Module):
         if isinstance(samples, (list, torch.Tensor)):
             samples = nested_tensor_from_tensor_list(samples)
         features, poss = self.backbone(samples)
-
 
         srcs = []
         masks = []
@@ -258,35 +258,38 @@ class DQDETR(nn.Module):
                 masks.append(mask)
                 poss.append(pos_l)
 
+        args_dn = [self.dn_number, self.dn_label_noise_ratio, self.dn_box_noise_scale, self.training, self.num_classes,
+                   self.hidden_dim, self.label_enc]
 
-        args_dn = [self.dn_number, self.dn_label_noise_ratio, self.dn_box_noise_scale, self.training, self.num_classes, self.hidden_dim, self.label_enc]
-        
         # attn_mask !!!!!!!!!!!!!!!!!!!!!
-        hs, reference, hs_enc, ref_enc, init_box_proposal, dn_meta, counting_output, num_select= self.transformer(srcs, masks, poss, targets, args_dn)
-       
+        hs, reference, hs_enc, ref_enc, init_box_proposal, dn_meta, counting_output, num_select = self.transformer(srcs,
+                                                                                                                   masks,
+                                                                                                                   poss,
+                                                                                                                   targets,
+                                                                                                                   args_dn)
+
         # In case num object=0
-        hs[0] += self.label_enc.weight[0,0]*0.0
+        hs[0] += self.label_enc.weight[0, 0] * 0.0
 
         # deformable-detr-like anchor update
         # reference_before_sigmoid = inverse_sigmoid(reference[:-1]) # n_dec, bs, nq, 4
         outputs_coord_list = []
         for dec_lid, (layer_ref_sig, layer_bbox_embed, layer_hs) in enumerate(zip(reference[:-1], self.bbox_embed, hs)):
             layer_delta_unsig = layer_bbox_embed(layer_hs)
-            layer_outputs_unsig = layer_delta_unsig  + inverse_sigmoid(layer_ref_sig)
+            layer_outputs_unsig = layer_delta_unsig + inverse_sigmoid(layer_ref_sig)
             layer_outputs_unsig = layer_outputs_unsig.sigmoid()
             outputs_coord_list.append(layer_outputs_unsig)
-        outputs_coord_list = torch.stack(outputs_coord_list)        
+        outputs_coord_list = torch.stack(outputs_coord_list)
 
         outputs_class = torch.stack([layer_cls_embed(layer_hs) for
                                      layer_cls_embed, layer_hs in zip(self.class_embed, hs)])
         if self.dn_number > 0 and dn_meta is not None:
             outputs_class, outputs_coord_list = \
                 dn_post_process(outputs_class, outputs_coord_list,
-                                dn_meta,self.aux_loss,self._set_aux_loss)
+                                dn_meta, self.aux_loss, self._set_aux_loss)
         out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord_list[-1]}
         if self.aux_loss:
             out['aux_outputs'] = self._set_aux_loss(outputs_class, outputs_coord_list)
-
 
         # for encoder output
         if hs_enc is not None:
@@ -300,7 +303,8 @@ class DQDETR(nn.Module):
             if hs_enc.shape[0] > 1:
                 enc_outputs_coord = []
                 enc_outputs_class = []
-                for layer_id, (layer_box_embed, layer_class_embed, layer_hs_enc, layer_ref_enc) in enumerate(zip(self.enc_bbox_embed, self.enc_class_embed, hs_enc[:-1], ref_enc[:-1])):
+                for layer_id, (layer_box_embed, layer_class_embed, layer_hs_enc, layer_ref_enc) in enumerate(
+                        zip(self.enc_bbox_embed, self.enc_class_embed, hs_enc[:-1], ref_enc[:-1])):
                     layer_enc_delta_unsig = layer_box_embed(layer_hs_enc)
                     layer_enc_outputs_coord_unsig = layer_enc_delta_unsig + inverse_sigmoid(layer_ref_enc)
                     layer_enc_outputs_coord = layer_enc_outputs_coord_unsig.sigmoid()
@@ -334,6 +338,7 @@ class SetCriterion(nn.Module):
         1) we compute hungarian assignment between ground truth boxes and the outputs of the model
         2) we supervise each pair of matched ground-truth / prediction (supervise class and box)
     """
+
     def __init__(self, num_classes, matcher, weight_dict, focal_alpha, losses):
         """ Create the criterion.
         Parameters:
@@ -363,12 +368,13 @@ class SetCriterion(nn.Module):
                                     dtype=torch.int64, device=src_logits.device)
 
         target_classes[idx] = target_classes_o
-        target_classes_onehot = torch.zeros([src_logits.shape[0], src_logits.shape[1], src_logits.shape[2]+1],
+        target_classes_onehot = torch.zeros([src_logits.shape[0], src_logits.shape[1], src_logits.shape[2] + 1],
                                             dtype=src_logits.dtype, layout=src_logits.layout, device=src_logits.device)
         target_classes_onehot.scatter_(2, target_classes.unsqueeze(-1), 1)
 
-        target_classes_onehot = target_classes_onehot[:,:,:-1]
-        loss_ce = sigmoid_focal_loss(src_logits, target_classes_onehot, num_boxes, alpha=self.focal_alpha, gamma=2) * src_logits.shape[1]
+        target_classes_onehot = target_classes_onehot[:, :, :-1]
+        loss_ce = sigmoid_focal_loss(src_logits, target_classes_onehot, num_boxes, alpha=self.focal_alpha, gamma=2) * \
+                  src_logits.shape[1]
         losses = {'loss_ce': loss_ce}
 
         if log:
@@ -414,7 +420,6 @@ class SetCriterion(nn.Module):
         with torch.no_grad():
             losses['loss_xy'] = loss_bbox[..., :2].sum() / num_boxes
             losses['loss_hw'] = loss_bbox[..., 2:].sum() / num_boxes
-
 
         return losses
 
@@ -480,7 +485,7 @@ class SetCriterion(nn.Module):
 
         """
         outputs_without_aux = {k: v for k, v in outputs.items() if k != 'aux_outputs'}
-        device=next(iter(outputs.values())).device
+        device = next(iter(outputs.values())).device
         indices = self.matcher(outputs_without_aux, targets)
 
         if return_indices:
@@ -501,7 +506,7 @@ class SetCriterion(nn.Module):
         dn_meta = outputs['dn_meta']
 
         if self.training and dn_meta and 'output_known_lbs_bboxes' in dn_meta:
-            output_known_lbs_bboxes,single_pad, scalar = self.prep_for_dn(dn_meta)
+            output_known_lbs_bboxes, single_pad, scalar = self.prep_for_dn(dn_meta)
 
             dn_pos_idx = []
             dn_neg_idx = []
@@ -518,13 +523,14 @@ class SetCriterion(nn.Module):
                 dn_pos_idx.append((output_idx, tgt_idx))
                 dn_neg_idx.append((output_idx + single_pad // 2, tgt_idx))
 
-            output_known_lbs_bboxes=dn_meta['output_known_lbs_bboxes']
+            output_known_lbs_bboxes = dn_meta['output_known_lbs_bboxes']
             l_dict = {}
             for loss in self.losses:
                 kwargs = {}
                 if 'labels' in loss:
                     kwargs = {'log': False}
-                l_dict.update(self.get_loss(loss, output_known_lbs_bboxes, targets, dn_pos_idx, num_boxes*scalar,**kwargs))
+                l_dict.update(
+                    self.get_loss(loss, output_known_lbs_bboxes, targets, dn_pos_idx, num_boxes * scalar, **kwargs))
 
             l_dict = {k + f'_dn': v for k, v in l_dict.items()}
             losses.update(l_dict)
@@ -561,22 +567,22 @@ class SetCriterion(nn.Module):
 
                 if self.training and dn_meta and 'output_known_lbs_bboxes' in dn_meta:
                     aux_outputs_known = output_known_lbs_bboxes['aux_outputs'][idx]
-                    l_dict={}
+                    l_dict = {}
                     for loss in self.losses:
                         kwargs = {}
                         if 'labels' in loss:
                             kwargs = {'log': False}
 
-                        l_dict.update(self.get_loss(loss, aux_outputs_known, targets, dn_pos_idx, num_boxes*scalar,
-                                                                 **kwargs))
+                        l_dict.update(self.get_loss(loss, aux_outputs_known, targets, dn_pos_idx, num_boxes * scalar,
+                                                    **kwargs))
 
                     l_dict = {k + f'_dn_{idx}': v for k, v in l_dict.items()}
                     losses.update(l_dict)
                 else:
                     l_dict = dict()
-                    l_dict['loss_bbox_dn']=torch.as_tensor(0.).to('cuda')
-                    l_dict['loss_giou_dn']=torch.as_tensor(0.).to('cuda')
-                    l_dict['loss_ce_dn']=torch.as_tensor(0.).to('cuda')
+                    l_dict['loss_bbox_dn'] = torch.as_tensor(0.).to('cuda')
+                    l_dict['loss_giou_dn'] = torch.as_tensor(0.).to('cuda')
+                    l_dict['loss_ce_dn'] = torch.as_tensor(0.).to('cuda')
                     l_dict['loss_xy_dn'] = torch.as_tensor(0.).to('cuda')
                     l_dict['loss_hw_dn'] = torch.as_tensor(0.).to('cuda')
                     l_dict['cardinality_error_dn'] = torch.as_tensor(0.).to('cuda')
@@ -625,17 +631,18 @@ class SetCriterion(nn.Module):
 
         return losses
 
-    def prep_for_dn(self,dn_meta):
+    def prep_for_dn(self, dn_meta):
         output_known_lbs_bboxes = dn_meta['output_known_lbs_bboxes']
-        num_dn_groups,pad_size=dn_meta['num_dn_group'],dn_meta['pad_size']
-        assert pad_size % num_dn_groups==0
-        single_pad=pad_size//num_dn_groups
+        num_dn_groups, pad_size = dn_meta['num_dn_group'], dn_meta['pad_size']
+        assert pad_size % num_dn_groups == 0
+        single_pad = pad_size // num_dn_groups
 
-        return output_known_lbs_bboxes,single_pad,num_dn_groups
+        return output_known_lbs_bboxes, single_pad, num_dn_groups
 
 
 class PostProcess(nn.Module):
     """ This module converts the model's output into the format expected by the coco api"""
+
     def __init__(self, nms_iou_threshold=-1) -> None:
         super().__init__()
         self.nms_iou_threshold = nms_iou_threshold
@@ -649,15 +656,15 @@ class PostProcess(nn.Module):
                           For evaluation, this must be the original image size (before any data augmentation)
                           For visualization, this should be the image size after data augment, but before padding
         """
-        
-        num_select = target_num          
+
+        num_select = target_num
         out_logits, out_bbox = outputs['pred_logits'], outputs['pred_boxes']
 
         assert len(out_logits) == len(target_sizes)
         assert target_sizes.shape[1] == 2
 
         prob = out_logits.sigmoid()
-        
+
         topk_values, topk_indexes = torch.topk(prob.view(out_logits.shape[0], -1), num_select, dim=1)
         scores = topk_values
         topk_boxes = topk_indexes // out_logits.shape[2]
@@ -670,19 +677,20 @@ class PostProcess(nn.Module):
 
         if test:
             assert not not_to_xyxy
-            boxes[:,:,2:] = boxes[:,:,2:] - boxes[:,:,:2]
-            
-        boxes = torch.gather(boxes, 1, topk_boxes.unsqueeze(-1).repeat(1,1,4))
-        
+            boxes[:, :, 2:] = boxes[:, :, 2:] - boxes[:, :, :2]
+
+        boxes = torch.gather(boxes, 1, topk_boxes.unsqueeze(-1).repeat(1, 1, 4))
+
         # and from relative [0, 1] to absolute [0, height] coordinates
         img_h, img_w = target_sizes.unbind(1)
         scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1)
         boxes = boxes * scale_fct[:, None, :]
 
         if self.nms_iou_threshold > 0:
-            item_indices = [nms(b, s, iou_threshold=self.nms_iou_threshold) for b,s in zip(boxes, scores)]
+            item_indices = [nms(b, s, iou_threshold=self.nms_iou_threshold) for b, s in zip(boxes, scores)]
 
-            results = [{'scores': s[i], 'labels': l[i], 'boxes': b[i]} for s, l, b, i in zip(scores, labels, boxes, item_indices)]
+            results = [{'scores': s[i], 'labels': l[i], 'boxes': b[i]} for s, l, b, i in
+                       zip(scores, labels, boxes, item_indices)]
         else:
             results = [{'scores': s, 'labels': l, 'boxes': b} for s, l, b in zip(scores, labels, boxes)]
 
@@ -752,10 +760,10 @@ def build_dqdetr(args):
         two_stage_class_embed_share=args.two_stage_class_embed_share,
         decoder_sa_type=args.decoder_sa_type,
         num_patterns=args.num_patterns,
-        dn_number = args.dn_number if args.use_dn else 0,
-        dn_box_noise_scale = args.dn_box_noise_scale,
-        dn_label_noise_ratio = args.dn_label_noise_ratio,
-        dn_labelbook_size = dn_labelbook_size,
+        dn_number=args.dn_number if args.use_dn else 0,
+        dn_box_noise_scale=args.dn_box_noise_scale,
+        dn_label_noise_ratio=args.dn_label_noise_ratio,
+        dn_labelbook_size=dn_labelbook_size,
     )
     if args.masks:
         model = DETRsegm(model, freeze_detr=(args.frozen_weights is not None))
@@ -766,7 +774,6 @@ def build_dqdetr(args):
     weight_dict['loss_giou'] = args.giou_loss_coef
     clean_weight_dict_wo_dn = copy.deepcopy(weight_dict)
 
-    
     # for DN training
     if args.use_dn:
         weight_dict['loss_ce_dn'] = args.cls_loss_coef
@@ -800,7 +807,8 @@ def build_dqdetr(args):
             interm_loss_coef = args.interm_loss_coef
         except:
             interm_loss_coef = 1.0
-        interm_weight_dict.update({k + f'_interm': v * interm_loss_coef * _coeff_weight_dict[k] for k, v in clean_weight_dict_wo_dn.items()})
+        interm_weight_dict.update(
+            {k + f'_interm': v * interm_loss_coef * _coeff_weight_dict[k] for k, v in clean_weight_dict_wo_dn.items()})
         weight_dict.update(interm_weight_dict)
 
     losses = ['labels', 'boxes', 'cardinality']

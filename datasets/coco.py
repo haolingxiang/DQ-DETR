@@ -4,9 +4,12 @@ COCO dataset which returns image_id for evaluation.
 
 Mostly copy-paste from https://github.com/pytorch/vision/blob/13b35ff/references/detection/coco_utils.py
 """
-if __name__=="__main__":
+from math import pi
+
+if __name__ == "__main__":
     # for debug only
     import os, sys
+
     sys.path.append(os.path.dirname(sys.path[0]))
 
 import json
@@ -28,8 +31,17 @@ __all__ = ['build']
 
 class label2compat():
     def __init__(self) -> None:
-        self.category_map_str = {"1": 1, "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8, "9": 9, "10": 10, "11": 11, "13": 12, "14": 13, "15": 14, "16": 15, "17": 16, "18": 17, "19": 18, "20": 19, "21": 20, "22": 21, "23": 22, "24": 23, "25": 24, "27": 25, "28": 26, "31": 27, "32": 28, "33": 29, "34": 30, "35": 31, "36": 32, "37": 33, "38": 34, "39": 35, "40": 36, "41": 37, "42": 38, "43": 39, "44": 40, "46": 41, "47": 42, "48": 43, "49": 44, "50": 45, "51": 46, "52": 47, "53": 48, "54": 49, "55": 50, "56": 51, "57": 52, "58": 53, "59": 54, "60": 55, "61": 56, "62": 57, "63": 58, "64": 59, "65": 60, "67": 61, "70": 62, "72": 63, "73": 64, "74": 65, "75": 66, "76": 67, "77": 68, "78": 69, "79": 70, "80": 71, "81": 72, "82": 73, "84": 74, "85": 75, "86": 76, "87": 77, "88": 78, "89": 79, "90": 80}
-        self.category_map = {int(k):v for k,v in self.category_map_str.items()}
+        self.category_map_str = {"1": 1, "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8, "9": 9, "10": 10,
+                                 "11": 11, "13": 12, "14": 13, "15": 14, "16": 15, "17": 16, "18": 17, "19": 18,
+                                 "20": 19, "21": 20, "22": 21, "23": 22, "24": 23, "25": 24, "27": 25, "28": 26,
+                                 "31": 27, "32": 28, "33": 29, "34": 30, "35": 31, "36": 32, "37": 33, "38": 34,
+                                 "39": 35, "40": 36, "41": 37, "42": 38, "43": 39, "44": 40, "46": 41, "47": 42,
+                                 "48": 43, "49": 44, "50": 45, "51": 46, "52": 47, "53": 48, "54": 49, "55": 50,
+                                 "56": 51, "57": 52, "58": 53, "59": 54, "60": 55, "61": 56, "62": 57, "63": 58,
+                                 "64": 59, "65": 60, "67": 61, "70": 62, "72": 63, "73": 64, "74": 65, "75": 66,
+                                 "76": 67, "77": 68, "78": 69, "79": 70, "80": 71, "81": 72, "82": 73, "84": 74,
+                                 "85": 75, "86": 76, "87": 77, "88": 78, "89": 79, "90": 80}
+        self.category_map = {int(k): v for k, v in self.category_map_str.items()}
 
     def __call__(self, target, img=None):
         labels = target['labels']
@@ -52,7 +64,7 @@ class label_compat2onehot():
 
     def __call__(self, target, img=None):
         labels = target['label_compat']
-        place_dict = {k:0 for k in range(self.num_class)}
+        place_dict = {k: 0 for k in range(self.num_class)}
         if self.num_output_objs == 1:
             res = torch.zeros(self.num_class)
             for i in labels:
@@ -89,17 +101,16 @@ class box_label_catter():
 
 class RandomSelectBoxlabels():
     def __init__(self, num_classes, leave_one_out=False, blank_prob=0.8,
-                    prob_first_item = 0.0,
-                    prob_random_item = 0.0,
-                    prob_last_item = 0.8,
-                    prob_stop_sign = 0.2
-                ) -> None:
+                 prob_first_item=0.0,
+                 prob_random_item=0.0,
+                 prob_last_item=0.8,
+                 prob_stop_sign=0.2
+                 ) -> None:
         self.num_classes = num_classes
         self.leave_one_out = leave_one_out
         self.blank_prob = blank_prob
 
         self.set_state(prob_first_item, prob_random_item, prob_last_item, prob_stop_sign)
-        
 
     def get_state(self):
         return [self.prob_first_item, self.prob_random_item, self.prob_last_item, self.prob_stop_sign]
@@ -115,10 +126,9 @@ class RandomSelectBoxlabels():
         self.prob_random_item = prob_random_item
         self.prob_last_item = prob_last_item
         self.prob_stop_sign = prob_stop_sign
-        
 
     def sample_for_pred_first_item(self, box_label: torch.FloatTensor):
-        box_label_known = torch.Tensor(0,5)
+        box_label_known = torch.Tensor(0, 5)
         box_label_unknown = box_label
         return box_label_known, box_label_unknown
 
@@ -142,17 +152,17 @@ class RandomSelectBoxlabels():
                 # first item
                 box_label_unknown.append(item)
                 known_label_list.append(label_i)
-        box_label_known = torch.stack(box_label_known) if len(box_label_known) > 0 else torch.Tensor(0,5)
-        box_label_unknown = torch.stack(box_label_unknown) if len(box_label_unknown) > 0 else torch.Tensor(0,5)
+        box_label_known = torch.stack(box_label_known) if len(box_label_known) > 0 else torch.Tensor(0, 5)
+        box_label_unknown = torch.stack(box_label_unknown) if len(box_label_unknown) > 0 else torch.Tensor(0, 5)
         return box_label_known, box_label_unknown
 
     def sample_for_pred_stop_sign(self, box_label: torch.FloatTensor):
-        box_label_unknown = torch.Tensor(0,5)
+        box_label_unknown = torch.Tensor(0, 5)
         box_label_known = box_label
         return box_label_known, box_label_unknown
 
     def __call__(self, target, img=None):
-        box_label = target['box_label'] # K, 5
+        box_label = target['box_label']  # K, 5
 
         dice_number = random.random()
 
@@ -165,7 +175,7 @@ class RandomSelectBoxlabels():
         else:
             box_label_known, box_label_unknown = self.sample_for_pred_stop_sign(box_label)
 
-        target['label_onehot_known'] = label2onehot(box_label_known[:,-1], self.num_classes)
+        target['label_onehot_known'] = label2onehot(box_label_known[:, -1], self.num_classes)
         target['label_onehot_unknown'] = label2onehot(box_label_unknown[:, -1], self.num_classes)
         target['box_label_known'] = box_label_known
         target['box_label_unknown'] = box_label_unknown
@@ -187,7 +197,7 @@ class RandomDrop():
 
 
 class BboxPertuber():
-    def __init__(self, max_ratio = 0.02, generate_samples = 1000) -> None:
+    def __init__(self, max_ratio=0.02, generate_samples=1000) -> None:
         self.max_ratio = max_ratio
         self.generate_samples = generate_samples
         self.samples = self.generate_pertube_samples()
@@ -199,9 +209,9 @@ class BboxPertuber():
         return samples
 
     def __call__(self, target, img):
-        known_box = target['box_label_known'] # Tensor(K,5), K known bbox
+        known_box = target['box_label_known']  # Tensor(K,5), K known bbox
         K = known_box.shape[0]
-        known_box_pertube = torch.zeros(K, 6) # 4:bbox, 1:prob, 1:label
+        known_box_pertube = torch.zeros(K, 6)  # 4:bbox, 1:prob, 1:label
         if K == 0:
             pass
         else:
@@ -209,7 +219,9 @@ class BboxPertuber():
                 self.idx = 0
             delta = self.samples[self.idx: self.idx + K, :]
             known_box_pertube[:, :4] = known_box[:, :4] + delta[:, :4]
-            iou = (torch.diag(box_iou(box_cxcywh_to_xyxy(known_box[:, :4]), box_cxcywh_to_xyxy(known_box_pertube[:, :4]))[0])) * (1 + delta[:, -1])
+            iou = (torch.diag(
+                box_iou(box_cxcywh_to_xyxy(known_box[:, :4]), box_cxcywh_to_xyxy(known_box_pertube[:, :4]))[0])) * (
+                          1 + delta[:, -1])
             known_box_pertube[:, 4].copy_(iou)
             known_box_pertube[:, -1].copy_(known_box[:, -1])
 
@@ -222,14 +234,13 @@ class RandomCutout():
         self.factor = factor
 
     def __call__(self, target, img=None):
-        unknown_box = target['box_label_unknown']           # Ku, 5
-        known_box = target['box_label_known_pertube']       # Kk, 6
+        unknown_box = target['box_label_unknown']  # Ku, 5
+        known_box = target['box_label_known_pertube']  # Kk, 6
         Ku = unknown_box.size(0)
 
-        known_box_add = torch.zeros(Ku, 6) # Ku, 6
+        known_box_add = torch.zeros(Ku, 6)  # Ku, 6
         known_box_add[:, :5] = unknown_box
-        known_box_add[:, 5].uniform_(0.5, 1) 
-        
+        known_box_add[:, 5].uniform_(0.5, 1)
 
         known_box_add[:, :2] += known_box_add[:, 2:4] * (torch.rand(Ku, 2) - 0.5) / 2
         known_box_add[:, 2:4] /= 2
@@ -252,14 +263,14 @@ class RandomSelectBoxes():
         for idx, item in enumerate(boxes):
             label = labels[idx].item()
             boxs_list[label].append(item)
-        boxs_list_tensor = [torch.stack(i) if len(i) > 0 else torch.Tensor(0,4) for i in boxs_list]
+        boxs_list_tensor = [torch.stack(i) if len(i) > 0 else torch.Tensor(0, 4) for i in boxs_list]
 
         # random selection
         box_known = []
         box_unknown = []
         for idx, item in enumerate(boxs_list_tensor):
             ncnt = item.shape[0]
-            nselect = int(random.random() * ncnt) # close in both sides, much faster than random.randint
+            nselect = int(random.random() * ncnt)  # close in both sides, much faster than random.randint
 
             item = item[torch.randperm(ncnt)]
             # random.shuffle(item)
@@ -291,7 +302,7 @@ class MaskCrop():
 
     def __call__(self, target, img):
         known_box = target['known_box']
-        h,w = img.shape[1:] # h,w
+        h, w = img.shape[1:]  # h,w
         # imgsize = target['orig_size'] # h,w
 
         scale = torch.Tensor([w, h, w, h])
@@ -331,7 +342,7 @@ class CocoDetection(torchvision.datasets.CocoDetection):
         target_class = dataset_hook_register[hackclassname]
         for item in self.aux_target_hacks:
             if isinstance(item, target_class):
-                for k,v in attrkv_dict.items():
+                for k, v in attrkv_dict.items():
                     setattr(item, k, v)
 
     def get_hack(self, hackclassname):
@@ -357,7 +368,7 @@ class CocoDetection(torchvision.datasets.CocoDetection):
         image_id = self.ids[idx]
         target = {'image_id': image_id, 'annotations': target}
         img, target = self.prepare(img, target)
-        
+
         if self._transforms is not None:
             img, target = self._transforms(img, target)
 
@@ -386,6 +397,38 @@ def convert_coco_poly_to_mask(segmentations, height, width):
     return masks
 
 
+def rbox_to_poly(rboxes: torch.Tensor) -> torch.Tensor:
+    """将旋转框转换为四角点坐标（OpenCV表示法）"""
+    cx = rboxes[:, 0]
+    cy = rboxes[:, 1]
+    w = rboxes[:, 2]
+    h = rboxes[:, 3]
+    theta = rboxes[:, 4]
+
+    theta = theta % pi
+
+    cos_theta = torch.cos(theta)
+    sin_theta = torch.sin(theta)
+
+    # 四角点偏移计算
+    offsets = torch.tensor([
+        [w / 2, h / 2],
+        [-w / 2, h / 2],
+        [-w / 2, -h / 2],
+        [w / 2, -h / 2]
+    ], device=rboxes.device).unsqueeze(0)
+
+    # 旋转矩阵变换
+    rotation_matrix = torch.stack([
+        cos_theta, -sin_theta,
+        sin_theta, cos_theta
+    ], dim=1).view(-1, 2, 2)
+
+    rotated_offsets = torch.bmm(offsets.repeat(rboxes.size(0), 1, 1), rotation_matrix)
+    corners = rotated_offsets + torch.stack([cx, cy], dim=1).unsqueeze(1)
+    return corners.view(-1, 8)
+
+
 class ConvertCocoPolysToMask(object):
     def __init__(self, return_masks=False):
         self.return_masks = return_masks
@@ -400,12 +443,22 @@ class ConvertCocoPolysToMask(object):
 
         anno = [obj for obj in anno if 'iscrowd' not in obj or obj['iscrowd'] == 0]
 
-        boxes = [obj["bbox"] for obj in anno]
+        # 旋转框参数读取
+        rboxes = [obj["rbox"] for obj in anno]
         # guard against no boxes via resizing
-        boxes = torch.as_tensor(boxes, dtype=torch.float32).reshape(-1, 4)
-        boxes[:, 2:] += boxes[:, :2]
-        boxes[:, 0::2].clamp_(min=0, max=w)
-        boxes[:, 1::2].clamp_(min=0, max=h)
+
+        rboxes = torch.as_tensor(rboxes, dtype=torch.float32).reshape(-1, 5)  # 5列：x,y,w,h,θ
+        # boxes[:, 2:] += boxes[:, :2]
+        # boxes[:, 0::2].clamp_(min=0, max=w)
+        # boxes[:, 1::2].clamp_(min=0, max=h)
+
+        # 2. 转换为多边形并裁剪（网页1[1](@ref)）
+        if rboxes.numel() > 0:
+            polygons = rbox_to_poly(rboxes)
+            polygons[:, 0::2].clamp_(min=0, max=w)  # x坐标裁剪
+            polygons[:, 1::2].clamp_(min=0, max=h)  # y坐标裁剪
+        else:
+            polygons = torch.zeros((0, 8), dtype=torch.float32)
 
         classes = [obj["category_id"] for obj in anno]
         classes = torch.tensor(classes, dtype=torch.int64)
@@ -422,24 +475,46 @@ class ConvertCocoPolysToMask(object):
             if num_keypoints:
                 keypoints = keypoints.view(num_keypoints, -1, 3)
 
-        keep = (boxes[:, 3] > boxes[:, 1]) & (boxes[:, 2] > boxes[:, 0])
-        boxes = boxes[keep]
+        # keep = (boxes[:, 3] > boxes[:, 1]) & (boxes[:, 2] > boxes[:, 0])
+        # boxes = boxes[keep]
+        # 3. 过滤无效框（网页1[3](@ref)）
+        keep = (polygons.view(-1, 4, 2)[:, :, 0].max(dim=1)[0] - polygons.view(-1, 4, 2)[:, :, 0].min(dim=1)[
+            0] > 1) & \
+               (polygons.view(-1, 4, 2)[:, :, 1].max(dim=1)[0] - polygons.view(-1, 4, 2)[:, :, 1].min(dim=1)[
+                    0] > 1)
+        rboxes = rboxes[keep]
+        polygons = polygons[keep]
+
+        # 4. 面积计算适配
+        if rboxes.numel() > 0:
+            target["area"] = (rboxes[:, 2] * rboxes[:, 3]).clamp(min=1.0)
+        else:
+            target["area"] = torch.zeros(0)
+
         classes = classes[keep]
         if self.return_masks:
             masks = masks[keep]
         if keypoints is not None:
             keypoints = keypoints[keep]
 
+        # 5. 更新目标字段
+        # target = {}
+        # target["boxes"] = boxes
+        # target["labels"] = classes
+        # if self.return_masks:
+        #     target["masks"] = masks
+        # target["image_id"] = image_id
+
+        # for conversion to coco api
         target = {}
-        target["boxes"] = boxes
+        target["rboxes"] = rboxes
+        target["polygons"] = polygons
         target["labels"] = classes
         if self.return_masks:
             target["masks"] = masks
-        target["image_id"] = image_id
         if keypoints is not None:
             target["keypoints"] = keypoints
-
-        # for conversion to coco api
+        target["image_id"] = image_id
         area = torch.tensor([obj["area"] for obj in anno])
         iscrowd = torch.tensor([obj["iscrowd"] if "iscrowd" in obj else 0 for obj in anno])
         target["area"] = area[keep]
@@ -452,7 +527,6 @@ class ConvertCocoPolysToMask(object):
 
 
 def make_coco_transforms(image_set, fix_size=False, strong_aug=False, args=None):
-
     normalize = T.Compose([
         T.ToTensor(),
         T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
@@ -463,7 +537,7 @@ def make_coco_transforms(image_set, fix_size=False, strong_aug=False, args=None)
     max_size = 1333
     scales2_resize = [400, 500, 600]
     scales2_crop = [384, 600]
-    
+
     # update args from config files
     scales = getattr(args, 'data_aug_scales', scales)
     max_size = getattr(args, 'data_aug_max_size', max_size)
@@ -474,10 +548,10 @@ def make_coco_transforms(image_set, fix_size=False, strong_aug=False, args=None)
     data_aug_scale_overlap = getattr(args, 'data_aug_scale_overlap', None)
     if data_aug_scale_overlap is not None and data_aug_scale_overlap > 0:
         data_aug_scale_overlap = float(data_aug_scale_overlap)
-        scales = [int(i*data_aug_scale_overlap) for i in scales]
-        max_size = int(max_size*data_aug_scale_overlap)
-        scales2_resize = [int(i*data_aug_scale_overlap) for i in scales2_resize]
-        scales2_crop = [int(i*data_aug_scale_overlap) for i in scales2_crop]
+        scales = [int(i * data_aug_scale_overlap) for i in scales]
+        max_size = int(max_size * data_aug_scale_overlap)
+        scales2_resize = [int(i * data_aug_scale_overlap) for i in scales2_resize]
+        scales2_crop = [int(i * data_aug_scale_overlap) for i in scales2_crop]
 
     datadict_for_print = {
         'scales': scales,
@@ -486,7 +560,6 @@ def make_coco_transforms(image_set, fix_size=False, strong_aug=False, args=None)
         'scales2_crop': scales2_crop
     }
     print("data_aug_params:", json.dumps(datadict_for_print, indent=2))
-        
 
     if image_set in ['train', 'trainval', 'debug']:
         if fix_size:
@@ -499,7 +572,7 @@ def make_coco_transforms(image_set, fix_size=False, strong_aug=False, args=None)
 
         if strong_aug:
             import datasets.sltransform as SLT
-            
+
             return T.Compose([
                 T.RandomHorizontalFlip(),
                 T.RandomSelect(
@@ -518,7 +591,7 @@ def make_coco_transforms(image_set, fix_size=False, strong_aug=False, args=None)
                 ]),
                 normalize,
             ])
-        
+
         return T.Compose([
             T.RandomHorizontalFlip(),
             T.RandomSelect(
@@ -539,7 +612,7 @@ def make_coco_transforms(image_set, fix_size=False, strong_aug=False, args=None)
             return T.Compose([
                 T.ResizeDebug((1280, 800)),
                 normalize,
-            ])   
+            ])
 
         return T.Compose([
             T.RandomResize([max(scales)], max_size=max_size),
@@ -552,7 +625,7 @@ def make_coco_transforms(image_set, fix_size=False, strong_aug=False, args=None)
             print("Under debug mode for flops calculation only!!!!!!!!!!!!!!!!")
             return T.Compose([
                 normalize,
-            ])   
+            ])
 
         return T.Compose([
             T.RandomResize([max(scales)], max_size=max_size),
@@ -565,8 +638,8 @@ def make_coco_transforms(image_set, fix_size=False, strong_aug=False, args=None)
 def get_aux_target_hacks_list(image_set, args):
     if args.modelname in ['q2bs_mask', 'q2bs']:
         aux_target_hacks_list = [
-            label2compat(), 
-            label_compat2onehot(), 
+            label2compat(),
+            label_compat2onehot(),
             RandomSelectBoxes(num_class=args.num_classes)
         ]
         if args.masked_data and image_set == 'train':
@@ -578,11 +651,11 @@ def get_aux_target_hacks_list(image_set, args):
             label_compat2onehot(),
             box_label_catter(),
             RandomSelectBoxlabels(num_classes=args.num_classes,
-                                    prob_first_item=args.prob_first_item,
-                                    prob_random_item=args.prob_random_item,
-                                    prob_last_item=args.prob_last_item,
-                                    prob_stop_sign=args.prob_stop_sign,
-                                    ),
+                                  prob_first_item=args.prob_first_item,
+                                  prob_random_item=args.prob_random_item,
+                                  prob_last_item=args.prob_last_item,
+                                  prob_stop_sign=args.prob_stop_sign,
+                                  ),
             BboxPertuber(max_ratio=0.02, generate_samples=1000),
         ]
     elif args.modelname in ['q2omask', 'q2osa']:
@@ -592,11 +665,11 @@ def get_aux_target_hacks_list(image_set, args):
                 label_compat2onehot(),
                 box_label_catter(),
                 RandomSelectBoxlabels(num_classes=args.num_classes,
-                                        prob_first_item=args.prob_first_item,
-                                        prob_random_item=args.prob_random_item,
-                                        prob_last_item=args.prob_last_item,
-                                        prob_stop_sign=args.prob_stop_sign,
-                                        ),
+                                      prob_first_item=args.prob_first_item,
+                                      prob_random_item=args.prob_random_item,
+                                      prob_last_item=args.prob_last_item,
+                                      prob_stop_sign=args.prob_stop_sign,
+                                      ),
                 RandomDrop(p=0.2),
                 BboxPertuber(max_ratio=0.02, generate_samples=1000),
                 RandomCutout(factor=0.5)
@@ -607,11 +680,11 @@ def get_aux_target_hacks_list(image_set, args):
                 label_compat2onehot(),
                 box_label_catter(),
                 RandomSelectBoxlabels(num_classes=args.num_classes,
-                                        prob_first_item=args.prob_first_item,
-                                        prob_random_item=args.prob_random_item,
-                                        prob_last_item=args.prob_last_item,
-                                        prob_stop_sign=args.prob_stop_sign,
-                                        ),
+                                      prob_first_item=args.prob_first_item,
+                                      prob_random_item=args.prob_random_item,
+                                      prob_last_item=args.prob_last_item,
+                                      prob_stop_sign=args.prob_stop_sign,
+                                      ),
                 BboxPertuber(max_ratio=0.02, generate_samples=1000),
             ]
     else:
@@ -623,14 +696,14 @@ def get_aux_target_hacks_list(image_set, args):
 def build(image_set, args):
     root = Path(args.coco_path)
     mode = 'instances'
-    
-    if args.dataset_file == 'aitod_v2':
+
+    if args.dataset_file == 'dota':
         PATHS = {
-            "train": (root / "images/train", root / "annotations" / 'aitodv2_train.json'),
-            "trainval": (root / "images/trainval", root / "annotations" / 'aitodv2_trainval.json'),
-            "val": (root / "images/val", root / "annotations" / 'aitodv2_val.json'),
-            "eval_debug": (root / "images/val", root / "annotations" / 'aitodv2_val.json'),
-            "test": (root / "images/test", root / "annotations" / 'aitodv2_test.json' ),
+            "train": (root / "images/train", root / "annotations" / 'instances_train.json'),
+            "trainval": (root / "images/trainval", root / "annotations" / 'instances_trainval.json'),
+            "val": (root / "images/val", root / "annotations" / 'instances_val.json'),
+            "eval_debug": (root / "images/val", root / "annotations" / 'instances_val.json'),
+            "test": (root / "images/test", root / "annotations" / 'instances_test.json'),
         }
 
     # add some hooks to datasets
@@ -645,22 +718,28 @@ def build(image_set, args):
         strong_aug = args.strong_aug
     except:
         strong_aug = False
-    dataset = CocoDetection(img_folder, ann_file, 
-            transforms=make_coco_transforms(image_set, fix_size=args.fix_size, strong_aug=strong_aug, args=args), 
-            return_masks=args.masks,
-            aux_target_hacks=aux_target_hacks_list,
-        )
+    dataset = CocoDetection(img_folder, ann_file,
+                            transforms=make_coco_transforms(image_set, fix_size=args.fix_size, strong_aug=strong_aug,
+                                                            args=args),
+                            return_masks=args.masks,
+                            aux_target_hacks=aux_target_hacks_list,
+                            )
 
     return dataset
 
 
-
 if __name__ == "__main__":
     # Objects365 Val example
-    dataset_o365 = CocoDetection(
-            '/path/Objects365/train/',
-            "/path/Objects365/slannos/anno_preprocess_train_v2.json",
-            transforms=None,
-            return_masks=False,
-        )
-    print('len(dataset_o365):', len(dataset_o365))
+    # dataset_o365 = CocoDetection(
+    #         '/path/Objects365/train/',
+    #         "/path/Objects365/slannos/anno_preprocess_train_v2.json",
+    #         transforms=None,
+    #         return_masks=False,
+    #     )
+    dataset_dota = CocoDetection(
+        r'E:\RSimages_objectdetection_transformer\DQ-DETR\Dataset\dota\train\images',
+        r"E:\RSimages_objectdetection_transformer\DQ-DETR\Dataset\dota\annotations\instances_train.json",
+        transforms=None,
+        return_masks=False,
+    )
+    print('len(dataset_o365):', len(dataset_dota))

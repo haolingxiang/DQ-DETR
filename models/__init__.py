@@ -6,5 +6,6 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 from .dqdetr import build_dqdetr
 
+
 def build_model(args):
     return build(args)

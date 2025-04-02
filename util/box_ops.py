@@ -25,7 +25,6 @@ def box_iou(boxes1, boxes2):
     area1 = box_area(boxes1)
     area2 = box_area(boxes2)
 
-
     lt = torch.max(boxes1[:, None, :2], boxes2[:, :2])  # [N,M,2]
     rb = torch.min(boxes1[:, None, 2:], boxes2[:, 2:])  # [N,M,2]
 
@@ -63,7 +62,6 @@ def generalized_box_iou(boxes1, boxes2):
     return iou - (area - union) / (area + 1e-6)
 
 
-
 # modified from torchvision to also return the union
 def box_iou_pairwise(boxes1, boxes2):
     area1 = box_area(boxes1)
@@ -95,7 +93,7 @@ def generalized_box_iou_pairwise(boxes1, boxes2):
     assert (boxes1[:, 2:] >= boxes1[:, :2]).all()
     assert (boxes2[:, 2:] >= boxes2[:, :2]).all()
     assert boxes1.shape == boxes2.shape
-    iou, union = box_iou_pairwise(boxes1, boxes2) # N, 4
+    iou, union = box_iou_pairwise(boxes1, boxes2)  # N, 4
 
     lt = torch.min(boxes1[:, :2], boxes2[:, :2])
     rb = torch.max(boxes1[:, 2:], boxes2[:, 2:])
@@ -104,6 +102,7 @@ def generalized_box_iou_pairwise(boxes1, boxes2):
     area = wh[:, 0] * wh[:, 1]
 
     return iou - (area - union) / area
+
 
 def masks_to_boxes(masks):
     """Compute the bounding boxes around the provided masks
@@ -131,8 +130,11 @@ def masks_to_boxes(masks):
 
     return torch.stack([x_min, y_min, x_max, y_max], 1)
 
+
 if __name__ == '__main__':
     x = torch.rand(5, 4)
     y = torch.rand(3, 4)
     iou, union = box_iou(x, y)
-    import ipdb; ipdb.set_trace()
+    import ipdb;
+
+    ipdb.set_trace()
